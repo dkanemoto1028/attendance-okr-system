@@ -16,20 +16,36 @@ const MY_HEALTH = healthData.find((h) => h.employeeId === "m1")!;
 type PunchState = "not_punched" | "in" | "out";
 type ChatMsg = { role: "user" | "bot"; text: string; time: string };
 
-function getBotReply(msg: string, t: (key: string) => string): string {
-  const lower = msg.toLowerCase();
-  const headacheKw = ["頭痛", "頭", "head", "headache", "두통", "머리", "đau đầu", "dolor", "cabeza", "头痛"];
-  const feverKw = ["熱", "発熱", "fever", "temp", "열", "sốt", "fiebre", "发烧"];
-  const tiredKw = ["疲れ", "睡眠", "眠れ", "tired", "sleep", "피곤", "수면", "mệt", "ngủ", "累", "睡", "cansado", "sueño"];
-  const stressKw = ["ストレス", "つらい", "しんどい", "stress", "스트레스", "căng thẳng", "압력", "难受", "estrés"];
-  const okKw = ["ok", "大丈夫", "元気", "fine", "good", "괜찮", "좋아", "ổn", "tốt", "好", "没事", "bien"];
-
-  if (headacheKw.some((k) => lower.includes(k))) return t("bot_headache");
-  if (feverKw.some((k) => lower.includes(k))) return t("bot_fever");
-  if (tiredKw.some((k) => lower.includes(k))) return t("bot_tired");
-  if (stressKw.some((k) => lower.includes(k))) return t("bot_stress");
-  if (okKw.some((k) => lower.includes(k))) return t("bot_ok");
-  return t("bot_default");
+async function fetchBotReply(
+  message: string,
+  history: ChatMsg[],
+  t: (key: string) => string
+): Promise<string> {
+  try {
+    const res = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message,
+        history: history
+          .filter((h) => h.role !== "bot" || history.indexOf(h) > 0)
+          .map((h) => ({ role: h.role === "user" ? "user" : "bot", text: h.text })),
+      }),
+    });
+    if (!res.ok) throw new Error("API error");
+    const data = await res.json() as { reply?: string; error?: string };
+    if (data.reply) return data.reply;
+    throw new Error(data.error);
+  } catch {
+    // Fallback to keyword matching when API is unavailable
+    const lower = message.toLowerCase();
+    if (["頭痛", "headache", "두통", "đau đầu", "dolor", "头痛"].some((k) => lower.includes(k))) return t("bot_headache");
+    if (["熱", "fever", "열", "sốt", "fiebre", "发烧"].some((k) => lower.includes(k))) return t("bot_fever");
+    if (["疲れ", "tired", "sleep", "피곤", "mệt", "累", "cansado"].some((k) => lower.includes(k))) return t("bot_tired");
+    if (["ストレス", "stress", "스트레스", "căng thẳng", "难受", "estrés"].some((k) => lower.includes(k))) return t("bot_stress");
+    if (["ok", "大丈夫", "元気", "fine", "good", "괜찮", "ổn", "好", "bien"].some((k) => lower.includes(k))) return t("bot_ok");
+    return t("bot_default");
+  }
 }
 
 function now() {
@@ -83,16 +99,16 @@ export default function MyPage() {
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs]);
 
-  const sendMsg = () => {
+  const sendMsg = async () => {
     if (!input.trim()) return;
     const userMsg: ChatMsg = { role: "user", text: input.trim(), time: now() };
     setMsgs((p) => [...p, userMsg]);
     setInput("");
     setTyping(true);
-    setTimeout(() => {
-      setMsgs((p) => [...p, { role: "bot", text: getBotReply(userMsg.text, t), time: now() }]);
-      setTyping(false);
-    }, 1200);
+    const currentHistory = [...msgs, userMsg];
+    const reply = await fetchBotReply(userMsg.text, currentHistory, t);
+    setMsgs((p) => [...p, { role: "bot", text: reply, time: now() }]);
+    setTyping(false);
   };
 
   const sleepColor = health.sleepQuality === "good" ? "text-emerald-600" : health.sleepQuality === "fair" ? "text-amber-600" : "text-red-500";
