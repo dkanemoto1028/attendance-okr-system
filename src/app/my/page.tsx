@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { healthData, employees } from "@/lib/mock-data";
 import { cn } from "@/lib/utils";
 import {
-  Heart, Thermometer, Moon, Footprints, Watch,
+  Heart, Thermometer, Moon, Watch,
   Pencil, Upload, X, CheckCircle, Clock, Send,
   Lock, ChevronDown, Calendar, FileText, Paperclip,
 } from "lucide-react";
@@ -16,39 +16,37 @@ const MY_HEALTH = healthData.find((h) => h.employeeId === "m1")!;
 type PunchState = "not_punched" | "in" | "out";
 type ChatMsg = { role: "user" | "bot"; text: string; time: string };
 
-const BOT_RESPONSES: { keywords: string[]; reply: string }[] = [
-  { keywords: ["頭痛", "頭", "head"], reply: "頭痛のご連絡ありがとうございます。無理せず今日は早退や在宅勤務も検討してください。必要であれば人事まで相談いただけます。この会話は管理者と本人のみが確認できます。" },
-  { keywords: ["熱", "発熱", "fever", "temp"], reply: "発熱の症状がある場合、出社を控えていただくことをお勧めします。体温を記録して、必要に応じて医療機関を受診してください。" },
-  { keywords: ["疲れ", "睡眠", "眠れ", "tired", "sleep"], reply: "お疲れ様です。睡眠不足が続くと健康に影響が出やすいです。本日の睡眠データも確認しました。無理をせず、上長に状況を共有することも一つの選択肢です。" },
-  { keywords: ["ストレス", "つらい", "しんどい", "stress"], reply: "お気持ちを打ち明けてくださりありがとうございます。この内容は管理者との間のみで共有されます。必要であれば1on1を設定することもできますので、お気軽にご相談ください。" },
-  { keywords: ["ok", "大丈夫", "元気", "fine"], reply: "それは良かったです！今日も無理せず、体調に変化があればいつでもこちらへ。" },
-];
-
-function getBotReply(msg: string): string {
+function getBotReply(msg: string, t: (key: string) => string): string {
   const lower = msg.toLowerCase();
-  for (const { keywords, reply } of BOT_RESPONSES) {
-    if (keywords.some((k) => lower.includes(k))) return reply;
-  }
-  return "ご連絡ありがとうございます。内容を確認しました。この会話は管理者と本人のみが閲覧できます。体調に大きな変化があれば、早めに管理者や医療機関へご相談ください。";
+  const headacheKw = ["頭痛", "頭", "head", "headache", "두통", "머리", "đau đầu", "dolor", "cabeza", "头痛"];
+  const feverKw = ["熱", "発熱", "fever", "temp", "열", "sốt", "fiebre", "发烧"];
+  const tiredKw = ["疲れ", "睡眠", "眠れ", "tired", "sleep", "피곤", "수면", "mệt", "ngủ", "累", "睡", "cansado", "sueño"];
+  const stressKw = ["ストレス", "つらい", "しんどい", "stress", "스트레스", "căng thẳng", "압력", "难受", "estrés"];
+  const okKw = ["ok", "大丈夫", "元気", "fine", "good", "괜찮", "좋아", "ổn", "tốt", "好", "没事", "bien"];
+
+  if (headacheKw.some((k) => lower.includes(k))) return t("bot_headache");
+  if (feverKw.some((k) => lower.includes(k))) return t("bot_fever");
+  if (tiredKw.some((k) => lower.includes(k))) return t("bot_tired");
+  if (stressKw.some((k) => lower.includes(k))) return t("bot_stress");
+  if (okKw.some((k) => lower.includes(k))) return t("bot_ok");
+  return t("bot_default");
 }
 
 function now() {
-  return new Date().toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" });
+  return new Date().toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
 }
 
 export default function MyPage() {
   const { t } = useLang();
 
-  // ── Punch
   const [punchState, setPunchState] = useState<PunchState>("not_punched");
   const [punchTime, setPunchTime] = useState<string | null>(null);
   const handlePunch = () => {
     const time = now();
     if (punchState === "not_punched") { setPunchState("in"); setPunchTime(time); }
-    else if (punchState === "in")    { setPunchState("out"); setPunchTime(time); }
+    else if (punchState === "in") { setPunchState("out"); setPunchTime(time); }
   };
 
-  // ── Health edit
   const [health, setHealth] = useState({ ...MY_HEALTH });
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState({ ...MY_HEALTH });
@@ -63,7 +61,6 @@ export default function MyPage() {
     setTimeout(() => setSaved(false), 2500);
   };
 
-  // ── Leave request
   const [leaveOpen, setLeaveOpen] = useState(false);
   const [leaveForm, setLeaveForm] = useState({ type: "annual", from: "", to: "", reason: "" });
   const [leaveSubmitted, setLeaveSubmitted] = useState(false);
@@ -73,13 +70,16 @@ export default function MyPage() {
     setTimeout(() => setLeaveSubmitted(false), 3000);
   };
 
-  // ── Wellness chat
-  const [msgs, setMsgs] = useState<ChatMsg[]>([
-    { role: "bot", text: "こんにちは。体調や気になることがあれば気軽に話しかけてください。この会話はあなたと管理者のみ確認できます。🔒", time: "08:00" },
-  ]);
+  const [msgs, setMsgs] = useState<ChatMsg[]>([]);
   const [input, setInput] = useState("");
   const [typing, setTyping] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
+
+  // Initialize greeting when lang changes
+  useEffect(() => {
+    setMsgs([{ role: "bot", text: t("bot_greeting"), time: "08:00" }]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [t("bot_greeting")]);
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs]);
 
@@ -90,7 +90,7 @@ export default function MyPage() {
     setInput("");
     setTyping(true);
     setTimeout(() => {
-      setMsgs((p) => [...p, { role: "bot", text: getBotReply(userMsg.text), time: now() }]);
+      setMsgs((p) => [...p, { role: "bot", text: getBotReply(userMsg.text, t), time: now() }]);
       setTyping(false);
     }, 1200);
   };
@@ -101,66 +101,57 @@ export default function MyPage() {
 
   return (
     <div className="p-4 md:p-8 space-y-5 pt-16 md:pt-8 max-w-2xl mx-auto">
-      {/* Header */}
       <div>
-        <h1 className="text-xl font-bold">
-          {t("greeting")}、{ME.nameEn} 👋
-        </h1>
+        <h1 className="text-xl font-bold">{t("greeting")}、{ME.nameEn} 👋</h1>
         <p className="text-slate-500 text-sm mt-0.5">2026-06-09 (Mon) · {ME.role}</p>
       </div>
 
-      {/* ── PUNCH CARD */}
+      {/* PUNCH */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
         <h2 className="text-sm font-semibold text-slate-500 mb-4 flex items-center gap-2">
-          <Clock size={15} /> 打刻 / Check-in
+          <Clock size={15} /> {t("punch_section")}
         </h2>
         {punchState === "not_punched" && (
-          <button
-            onClick={handlePunch}
-            className="w-full py-5 rounded-xl bg-emerald-500 hover:bg-emerald-600 active:scale-95 transition-all text-white text-lg font-bold shadow-lg shadow-emerald-200"
-          >
-            ✅ Punch In
+          <button onClick={handlePunch}
+            className="w-full py-5 rounded-xl bg-emerald-500 hover:bg-emerald-600 active:scale-95 transition-all text-white text-lg font-bold shadow-lg shadow-emerald-200">
+            ✅ {t("punch_in")}
           </button>
         )}
         {punchState === "in" && (
           <div className="space-y-3">
             <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3">
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="text-sm font-medium text-emerald-700">In office — punched in at {punchTime}</span>
+              <span className="text-sm font-medium text-emerald-700">{t("punched_in_at")} {punchTime}</span>
             </div>
-            <button
-              onClick={handlePunch}
-              className="w-full py-4 rounded-xl bg-red-500 hover:bg-red-600 active:scale-95 transition-all text-white text-base font-bold"
-            >
-              🚪 Punch Out
+            <button onClick={handlePunch}
+              className="w-full py-4 rounded-xl bg-red-500 hover:bg-red-600 active:scale-95 transition-all text-white text-base font-bold">
+              🚪 {t("punch_out")}
             </button>
           </div>
         )}
         {punchState === "out" && (
           <div className="flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3">
             <CheckCircle size={18} className="text-slate-500" />
-            <span className="text-sm text-slate-600">Punched out at {punchTime}. Have a good rest! 👋</span>
+            <span className="text-sm text-slate-600">{t("punched_out_at")}</span>
           </div>
         )}
       </div>
 
-      {/* ── HEALTH DATA */}
+      {/* HEALTH DATA */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-semibold text-slate-500 flex items-center gap-2">
             <Watch size={15} /> {health.device} — {health.updatedAt} sync
           </h2>
-          <button
-            onClick={() => { setDraft({ ...health }); setProofFiles([]); setEditing(true); }}
-            className="flex items-center gap-1.5 text-xs text-indigo-600 border border-indigo-200 bg-indigo-50 px-3 py-1.5 rounded-lg hover:bg-indigo-100"
-          >
-            <Pencil size={12} /> 手動修正
+          <button onClick={() => { setDraft({ ...health }); setProofFiles([]); setEditing(true); }}
+            className="flex items-center gap-1.5 text-xs text-indigo-600 border border-indigo-200 bg-indigo-50 px-3 py-1.5 rounded-lg hover:bg-indigo-100">
+            <Pencil size={12} /> {t("manual_edit")}
           </button>
         </div>
 
         {saved && (
           <div className="mb-3 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 flex items-center gap-2">
-            <CheckCircle size={13} /> 保存しました
+            <CheckCircle size={13} /> {t("health_saved")}
           </div>
         )}
 
@@ -169,7 +160,7 @@ export default function MyPage() {
             <HealthMetric icon={<Heart size={18} className={hrColor} />} label="Heart rate" value={`${health.heartRate} bpm`} color={hrColor} />
             <HealthMetric icon={<Thermometer size={18} className={tempColor} />} label="Body temp" value={`${health.bodyTemp} °C`} color={tempColor} />
             <HealthMetric icon={<Moon size={18} className={sleepColor} />} label="Sleep" value={`${health.sleepHours} h`} color={sleepColor} sub={health.sleepQuality} />
-            <HealthMetric icon={<Footprints size={18} className="text-blue-500" />} label="Steps" value={health.steps.toLocaleString()} color="text-blue-500" />
+            <HealthMetric icon={<Heart size={18} className="text-blue-500" />} label="Steps" value={health.steps.toLocaleString()} color="text-blue-500" />
           </div>
         ) : (
           <div className="space-y-4">
@@ -190,21 +181,18 @@ export default function MyPage() {
                   className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
               </label>
               <label className="block">
-                <span className="text-xs text-slate-500 flex items-center gap-1 mb-1"><Footprints size={12} /> Steps</span>
+                <span className="text-xs text-slate-500 flex items-center gap-1 mb-1">Steps</span>
                 <input type="number" value={draft.steps} onChange={(e) => setDraft((p) => ({ ...p, steps: +e.target.value }))}
                   className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
               </label>
             </div>
 
-            {/* File proof upload */}
             <div>
-              <p className="text-xs text-slate-500 mb-2 flex items-center gap-1"><Paperclip size={12} /> 修正の根拠（スクリーンショット・医師の証明書など）</p>
-              <button
-                onClick={() => fileRef.current?.click()}
-                className="w-full border-2 border-dashed border-slate-200 rounded-xl py-4 text-sm text-slate-400 hover:border-indigo-300 hover:bg-indigo-50/30 transition-colors flex flex-col items-center gap-1"
-              >
+              <p className="text-xs text-slate-500 mb-2 flex items-center gap-1"><Paperclip size={12} /> {t("proof_label")}</p>
+              <button onClick={() => fileRef.current?.click()}
+                className="w-full border-2 border-dashed border-slate-200 rounded-xl py-4 text-sm text-slate-400 hover:border-indigo-300 hover:bg-indigo-50/30 transition-colors flex flex-col items-center gap-1">
                 <Upload size={20} className="text-slate-300" />
-                ファイルをアップロード / Browse
+                {t("upload_btn")}
               </button>
               <input ref={fileRef} type="file" multiple accept="image/*,.pdf" className="hidden"
                 onChange={(e) => setProofFiles((p) => [...p, ...Array.from(e.target.files ?? [])])} />
@@ -224,83 +212,82 @@ export default function MyPage() {
 
             <div className="flex gap-2">
               <button onClick={saveHealth} className="flex-1 bg-indigo-600 text-white text-sm py-2.5 rounded-xl font-medium hover:bg-indigo-700">
-                保存 / Save
+                {t("save")}
               </button>
               <button onClick={() => setEditing(false)} className="px-4 border border-slate-200 text-sm py-2.5 rounded-xl text-slate-600 hover:bg-slate-50">
-                キャンセル
+                {t("cancel_btn")}
               </button>
             </div>
           </div>
         )}
       </div>
 
-      {/* ── LEAVE REQUEST */}
+      {/* LEAVE REQUEST */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
         <div className="flex items-center justify-between mb-1">
           <h2 className="text-sm font-semibold text-slate-500 flex items-center gap-2">
-            <Calendar size={15} /> 休暇申請 / Leave Request
+            <Calendar size={15} /> {t("leave_section")}
           </h2>
           <button onClick={() => setLeaveOpen((p) => !p)}
             className="flex items-center gap-1 text-xs text-indigo-600 border border-indigo-200 bg-indigo-50 px-3 py-1.5 rounded-lg hover:bg-indigo-100">
-            + 申請する <ChevronDown size={12} className={cn("transition-transform", leaveOpen && "rotate-180")} />
+            + {t("apply_leave_btn")} <ChevronDown size={12} className={cn("transition-transform", leaveOpen && "rotate-180")} />
           </button>
         </div>
-        <p className="text-xs text-slate-400 mb-3">残有給 17日 / Remaining leave: 17 days</p>
+        <p className="text-xs text-slate-400 mb-3">{t("remaining_leave_label")}: 17 {t("days_unit")}</p>
 
         {leaveSubmitted && (
           <div className="mb-3 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 flex items-center gap-2">
-            <CheckCircle size={13} /> 申請を送信しました。承認をお待ちください。
+            <CheckCircle size={13} /> {t("leave_submitted_msg")}
           </div>
         )}
 
         {leaveOpen && (
           <div className="space-y-3 mt-3 border-t border-slate-100 pt-4">
             <div>
-              <label className="text-xs text-slate-500 block mb-1">種別 / Type</label>
+              <label className="text-xs text-slate-500 block mb-1">{t("leave_type_label")}</label>
               <select value={leaveForm.type} onChange={(e) => setLeaveForm((p) => ({ ...p, type: e.target.value }))}
                 className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300">
-                <option value="annual">有給休暇 / Annual leave</option>
-                <option value="sick">病欠 / Sick leave</option>
-                <option value="special">特別休暇 / Special leave</option>
-                <option value="half">半日休暇 / Half day</option>
+                <option value="annual">{t("leave_annual")}</option>
+                <option value="sick">{t("leave_sick_opt")}</option>
+                <option value="special">{t("leave_special")}</option>
+                <option value="half">{t("leave_half")}</option>
               </select>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-xs text-slate-500 block mb-1">開始日 / From</label>
+                <label className="text-xs text-slate-500 block mb-1">{t("leave_from_label")}</label>
                 <input type="date" value={leaveForm.from} onChange={(e) => setLeaveForm((p) => ({ ...p, from: e.target.value }))}
                   className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
               </div>
               <div>
-                <label className="text-xs text-slate-500 block mb-1">終了日 / To</label>
+                <label className="text-xs text-slate-500 block mb-1">{t("leave_to_label")}</label>
                 <input type="date" value={leaveForm.to} onChange={(e) => setLeaveForm((p) => ({ ...p, to: e.target.value }))}
                   className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
               </div>
             </div>
             <div>
-              <label className="text-xs text-slate-500 block mb-1">理由 / Reason (optional)</label>
+              <label className="text-xs text-slate-500 block mb-1">{t("leave_reason_label")}</label>
               <textarea value={leaveForm.reason} onChange={(e) => setLeaveForm((p) => ({ ...p, reason: e.target.value }))}
-                rows={2} placeholder="任意記載..."
+                rows={2}
                 className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300" />
             </div>
             <button onClick={submitLeave}
               disabled={!leaveForm.from || !leaveForm.to}
               className="w-full bg-indigo-600 text-white text-sm py-2.5 rounded-xl font-medium hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed">
-              申請を送る / Submit
+              {t("leave_submit_btn")}
             </button>
           </div>
         )}
       </div>
 
-      {/* ── WELLNESS CHAT */}
+      {/* WELLNESS CHAT */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
         <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
           <Lock size={14} className="text-indigo-400" />
-          <h2 className="text-sm font-semibold text-slate-700">体調チャット / Wellness Chat</h2>
-          <span className="ml-auto text-xs text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">管理者 + 本人のみ閲覧</span>
+          <h2 className="text-sm font-semibold text-slate-700">{t("wellness_title")}</h2>
+          <span className="ml-auto text-xs text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">{t("admin_only_label")}</span>
         </div>
 
-        {/* Messages */}
         <div className="h-64 overflow-y-auto px-4 py-4 space-y-3 bg-slate-50/50">
           {msgs.map((msg, i) => (
             <div key={i} className={cn("flex gap-2", msg.role === "user" ? "flex-row-reverse" : "flex-row")}>
@@ -332,13 +319,12 @@ export default function MyPage() {
           <div ref={chatEndRef} />
         </div>
 
-        {/* Input */}
         <div className="px-4 py-3 border-t border-slate-100 flex gap-2">
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendMsg()}
-            placeholder="体調・気になることを入力… / Type how you feel"
+            placeholder={t("chat_placeholder")}
             className="flex-1 text-sm border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-slate-50"
           />
           <button onClick={sendMsg} disabled={!input.trim()}

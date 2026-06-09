@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useNotif, type NotifType } from "@/context/notifications";
+import { useLang } from "@/context/lang";
 import { cn } from "@/lib/utils";
 import { Bell, X, CheckCheck, AlertTriangle, FileText, Target, Clock, Shield } from "lucide-react";
 
@@ -16,16 +17,16 @@ const TYPE_ICON: Record<NotifType, React.ReactNode> = {
 export default function NotificationPanel() {
   const [open, setOpen] = useState(false);
   const { notifications, unreadCount, markRead, markAllRead, dismiss } = useNotif();
+  const { t } = useLang();
 
   return (
     <div className="relative">
-      {/* Bell button */}
       <button
         onClick={() => setOpen((v) => !v)}
         className="flex items-center gap-2 bg-indigo-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors relative"
       >
         <Bell size={16} />
-        通知
+        {t("notif_btn")}
         {unreadCount > 0 && (
           <span className="bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
             {unreadCount}
@@ -33,18 +34,14 @@ export default function NotificationPanel() {
         )}
       </button>
 
-      {/* Dropdown panel */}
       {open && (
         <>
-          {/* Backdrop */}
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-
           <div className="absolute right-0 top-11 w-96 bg-white rounded-xl shadow-2xl border border-slate-100 z-50 overflow-hidden">
-            {/* Header */}
             <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
               <div>
-                <h3 className="font-semibold text-slate-900">通知</h3>
-                <p className="text-xs text-slate-400 mt-0.5">未読 {unreadCount}件</p>
+                <h3 className="font-semibold text-slate-900">{t("notif_btn")}</h3>
+                <p className="text-xs text-slate-400 mt-0.5">{t("unread_count")} {unreadCount}{t("unread_unit")}</p>
               </div>
               <div className="flex items-center gap-2">
                 {unreadCount > 0 && (
@@ -52,7 +49,7 @@ export default function NotificationPanel() {
                     onClick={markAllRead}
                     className="text-xs text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
                   >
-                    <CheckCheck size={13} /> すべて既読
+                    <CheckCheck size={13} /> {t("mark_all_read")}
                   </button>
                 )}
                 <button onClick={() => setOpen(false)} className="text-slate-400 hover:text-slate-600">
@@ -61,12 +58,11 @@ export default function NotificationPanel() {
               </div>
             </div>
 
-            {/* List */}
             <div className="max-h-[480px] overflow-y-auto divide-y divide-slate-50">
               {notifications.length === 0 && (
                 <div className="py-12 text-center text-sm text-slate-400">
                   <Bell size={32} className="mx-auto mb-2 opacity-30" />
-                  通知はありません
+                  {t("no_notifications")}
                 </div>
               )}
               {notifications.map((n) => (
@@ -100,9 +96,7 @@ export default function NotificationPanel() {
                             {n.actionLabel} →
                           </button>
                         )}
-                        {!n.read && (
-                          <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 ml-auto" />
-                        )}
+                        {!n.read && <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 ml-auto" />}
                       </div>
                     </div>
                   </div>
@@ -110,10 +104,9 @@ export default function NotificationPanel() {
               ))}
             </div>
 
-            {/* Footer */}
             <div className="px-5 py-3 border-t border-slate-100 text-center">
               <a href="/settings" className="text-xs text-slate-400 hover:text-indigo-600 transition-colors">
-                通知設定を変更 →
+                {t("notif_settings_link")}
               </a>
             </div>
           </div>
