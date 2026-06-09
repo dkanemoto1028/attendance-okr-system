@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI } from "@google/genai";
 import { NextRequest, NextResponse } from "next/server";
 
 const SYSTEM_PROMPT = `You are a confidential wellness assistant for a global HR platform called PeopleOS.
@@ -25,24 +25,26 @@ export async function POST(req: NextRequest) {
   };
 
   try {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({
-      model: "gemini-1.5-flash",
-      systemInstruction: SYSTEM_PROMPT,
-    });
+    const ai = new GoogleGenAI({ apiKey });
 
-    const chat = model.startChat({
-      history: history.map((h) => ({
+    const contents = [
+      ...history.map((h) => ({
         role: h.role === "user" ? "user" : "model",
         parts: [{ text: h.text }],
       })),
+      { role: "user", parts: [{ text: message }] },
+    ];
+
+    const response = await ai.models.generateContent({
+      model: "gemini-2.0-flash",
+      contents,
+      config: { systemInstruction: SYSTEM_PROMPT },
     });
 
-    const result = await chat.sendMessage(message);
-    const text = result.response.text();
+    const text = response.text;
     return NextResponse.json({ reply: text });
   } catch (err) {
     console.error("Gemini error:", err);
-    return NextResponse.json({ error: "Failed to get response" }, { status: 500 });
+    return NextResponse.json({ error: String(err) }, { status: 500 });
   }
 }
