@@ -1,4 +1,3 @@
-import { GoogleGenAI } from "@google/genai";
 import { NextRequest, NextResponse } from "next/server";
 
 const SYSTEM_PROMPT = `You are a confidential wellness assistant for a global HR platform called PeopleOS.
@@ -14,7 +13,7 @@ Guidelines:
 - Do not use markdown formatting`;
 
 export async function POST(req: NextRequest) {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) {
     return NextResponse.json({ error: "API key not configured" }, { status: 500 });
   }
@@ -24,27 +23,40 @@ export async function POST(req: NextRequest) {
     history: { role: string; text: string }[];
   };
 
+  const messages = [
+    { role: "system", content: SYSTEM_PROMPT },
+    ...history.map((h) => ({
+      role: h.role === "user" ? "user" : "assistant",
+      content: h.text,
+    })),
+    { role: "user", content: message },
+  ];
+
   try {
-    const ai = new GoogleGenAI({ apiKey });
-
-    const contents = [
-      ...history.map((h) => ({
-        role: h.role === "user" ? "user" : "model",
-        parts: [{ text: h.text }],
-      })),
-      { role: "user", parts: [{ text: message }] },
-    ];
-
-    const response = await ai.models.generateContent({
-      model: "gemini-1.5-flash",
-      contents,
-      config: { systemInstruction: SYSTEM_PROMPT },
+    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "llama-3.1-8b-instant",
+        messages,
+        max_tokens: 200,
+        temperature: 0.7,
+      }),
     });
 
-    const text = response.text;
-    return NextResponse.json({ reply: text });
+    if (!res.ok) {
+      const err = await res.text();
+      console.error("Groq error:", err);
+      return NextResponse.json({ error: err }, { status: res.status });
+    }
+
+    const data = await res.json() as { choices: { message: { content: string } }[] };
+    return NextResponse.json({ reply: data.choices[0].message.content });
   } catch (err) {
-    console.error("Gemini error:", err);
+    console.error("Groq error:", err);
     return NextResponse.json({ error: String(err) }, { status: 500 });
   }
 }
